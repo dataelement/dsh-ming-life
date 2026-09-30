@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'
 
 const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 
-function fixture() {
+function fixture({ priorStyle = false } = {}) {
   let plugin, panel
   const effects = []
   const observers = new Set()
@@ -18,6 +18,12 @@ function fixture() {
       if (selector === 'style[data-dsh-plugin="ming-life"]') return styles.find(style => style.dataset.dshPlugin === 'ming-life') || null
       return null
     }
+  }
+  if (priorStyle) {
+    const style = document.createElement('style')
+    style.dataset.plugin = 'ming-life'
+    style.textContent = '.ml-panel{display:block}'
+    styles.push(style)
   }
   class MutationObserver {
     constructor(notify) { this.notify = notify }
@@ -70,4 +76,12 @@ test('workbench stylesheet is owned and restored when removed while panel is mou
   for (const cleanup of app.effects.reverse()) cleanup()
   assert.equal(app.styles.length, 0, 'plugin teardown must remove its stylesheet')
   assert.equal(app.observers.size, 0)
+})
+
+test('an existing style from an older client revision receives current CSS', () => {
+  const app = fixture({ priorStyle: true })
+  assert.equal(app.styles.length, 1)
+  assert.match(app.styles[0].textContent, /\.ml-panel\{[^}]*display:flex/)
+  for (const cleanup of app.effects.reverse()) cleanup()
+  assert.equal(app.styles.length, 0)
 })
