@@ -24,6 +24,8 @@ Requires Desktop exposing both `desktopWorkbenches.register` and `ensureSession`
 
 ---
 
+Creating or opening an ordinary unbound session from Desktop's global navigation exits the Ming Life workbench. Profiles and existing workbench sessions remain intact and are restored when the workbench is opened again. Only sessions explicitly created or restored inside the workbench receive workbench ownership.
+
 ## Contents
 
 - [Highlights](#highlights)
