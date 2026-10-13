@@ -10,9 +10,9 @@ function sessionSnapshot(mode, current) {
   if (current) byId[current] = { retainedBy: { mainView: 1 } }
   return { ids: Object.keys(byId), byId }
 }
-function fixture({ mode = 'legacy', projects = [] } = {}) {
+function fixture({ mode = 'legacy', projects = [], stored = new Map(), savedSession = '' } = {}) {
   let plugin, draft = '', current = null, ready = true, resultSession = 's1', ensureWait
-  const calls = [], timers = [], listeners = new Set(), stored = new Map()
+  const calls = [], timers = [], listeners = new Set()
   const snapshots = { state: { active: 'dataelement/dsh-ming-life', added: ['dataelement/dsh-ming-life'], sessionBindings: {} } }
   const input = { state: { getSnapshot: () => ({ draft, phase: 'plain', occurrences: [] }) }, setDraft: text => { draft = text; calls.push(['draft', text]) }, submit: async () => { calls.push(['submit', draft]); draft = '' } }
   const ctx = { effect: fn => fn(), sessions: { list: { getSnapshot: () => sessionSnapshot(mode, current), subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn) } }, scope: () => ({ get: () => ready ? { input: { for: () => input } } : null }) },
@@ -26,7 +26,7 @@ function fixture({ mode = 'legacy', projects = [] } = {}) {
     window: { location: { origin: 'http://local' }, __ModuleLoader__: { load: spec => { plugin = spec.factory(() => ({ createElement() {} })) } } },
     document: { createElement: () => ({ dataset: {} }), head: { appendChild() {} }, querySelector: () => null },
     localStorage: { getItem: key => stored.get(key) || '{}', setItem: (key, value) => { stored.set(key, value) } },
-    fetch: async (url, options) => { if (options) calls.push(['post', JSON.parse(options.body)]); return { ok: true, json: async () => url.endsWith('/projects') ? { projects } : { folder: '/profiles/A', profile: { name: 'A', sessionId: '' } } } },
+    fetch: async (url, options) => { if (options) calls.push(['post', JSON.parse(options.body)]); return { ok: true, json: async () => url.endsWith('/projects') ? { projects } : { folder: '/profiles/A', profile: { name: 'A', sessionId: savedSession } } } },
     setTimeout: fn => { timers.push(fn); return 1 }, clearTimeout() {}, setInterval: () => 1, clearInterval() {}
   })
   plugin.apply(ctx)
@@ -139,4 +139,18 @@ test('registration takes identity and displayed version from the host catalog', 
   assert.equal(Object.hasOwn(descriptor, 'id'), false)
   assert.equal(pkg.repository.url, 'git+https://github.com/dataelement/dsh-ming-life.git')
   assert.ok(!pkg.files.includes('workbench.json'))
+})
+
+test('pending onboarding survives host reload and is delivered only once to its owned session', async () => {
+  const stored = new Map()
+  const first = fixture({ stored }); first.ready(false)
+  await first.plugin.openProject('A'); await tick()
+  assert.equal(first.draft(), '')
+  const restarted = fixture({ stored, savedSession: 's1' })
+  await restarted.plugin.openProject('A'); await tick()
+  assert.match(restarted.draft(), /按回车发送/)
+  assert.equal(restarted.calls.filter(row => row[0] === 'post').length, 0)
+  restarted.setDraft(''); restarted.plugin.flushPending()
+  assert.equal(restarted.draft(), '')
+  assert.equal(stored.get('dsh.ming-life.initial-drafts.v2'), '[]')
 })
